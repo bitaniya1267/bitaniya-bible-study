@@ -55,11 +55,11 @@ class _BitaniyaBibleStudyAppState extends State<BitaniyaBibleStudyApp> {
   }
 
   ThemeData get lightTheme {
-    const ivory = Color(0xFFF8F7F3);
+    const ivory = Color(0xFFF6F3EA);
     const paper = Color(0xFFFFFFFF);
-    const plum = Color(0xFF5E4B8B);
-    const plumSoft = Color(0xFFE9E3F3);
-    const ink = Color(0xFF252331);
+    const plum = Color(0xFF285943);
+    const plumSoft = Color(0xFFDCEBE2);
+    const ink = Color(0xFF1E2923);
 
     return ThemeData(
       useMaterial3: true,
@@ -975,780 +975,117 @@ List<Map<String, dynamic>> studySearchResults(List<StudyDay> days, String query)
 class AppShell extends StatefulWidget {
   final bool isDarkMode;
   final Future<void> Function(bool) onThemeChanged;
-
-  const AppShell({
-    super.key,
-    required this.isDarkMode,
-    required this.onThemeChanged,
-  });
-
-  @override
-  State<AppShell> createState() =>
-      _AppShellState();
+  const AppShell({super.key, required this.isDarkMode, required this.onThemeChanged});
+  @override State<AppShell> createState() => _AppShellState();
 }
 
 class _AppShellState extends State<AppShell> {
   int currentIndex = 0;
-  DateTime selectedStudyDate = DateTime.now();
-
   List<StudyDay> days = [];
   bool loading = true;
 
-  @override
-  void initState() {
-    super.initState();
-    loadData();
-  }
-
+  @override void initState() { super.initState(); loadData(); }
   Future<void> loadData() async {
-    final loaded =
-        await StudyStorage.loadDays();
-
+    final loaded = await StudyStorage.loadDays();
     if (!mounted) return;
-
-    setState(() {
-      days = loaded;
-      loading = false;
-    });
+    setState(() { days = loaded; loading = false; });
   }
-
-  Future<void> saveData() async {
-    await StudyStorage.saveDays(days);
-
-    if (!mounted) return;
-
-    setState(() {});
-  }
-
   void updateDay(StudyDay day) {
-    final index = days.indexWhere(
-      (item) => item.dateKey == day.dateKey,
-    );
-
-    setState(() {
-      if (index >= 0) {
-        days[index] = day;
-      } else {
-        days.add(day);
-      }
-    });
-
-    saveData();
+    final i = days.indexWhere((x) => x.dateKey == day.dateKey);
+    setState(() { if (i >= 0) days[i] = day; else days.add(day); });
+    StudyStorage.saveDays(days);
   }
+  void deleteDay(String key) { setState(() => days.removeWhere((x) => x.dateKey == key)); StudyStorage.saveDays(days); }
 
-  void deleteDay(String dateKey) {
-    setState(() {
-      days.removeWhere(
-        (day) => day.dateKey == dateKey,
-      );
-    });
-
-    saveData();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (loading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+  void openPage(int index) => setState(() => currentIndex = index);
+  void openSettings() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SettingsScreen(isDarkMode: widget.isDarkMode, onThemeChanged: widget.onThemeChanged)));
+  void openMore(String value) {
+    switch (value) {
+      case 'search': Navigator.of(context).push(MaterialPageRoute(builder: (_) => StudySearchScreen(days: days))); break;
+      case 'bookmarks': Navigator.of(context).push(MaterialPageRoute(builder: (_) => StudyLibraryScreen(days: days, favoritesOnly: false))); break;
+      case 'favorites': Navigator.of(context).push(MaterialPageRoute(builder: (_) => StudyLibraryScreen(days: days, favoritesOnly: true))); break;
+      case 'calendar': Navigator.of(context).push(MaterialPageRoute(builder: (_) => StudyCalendarScreen(days: days, onOpenDay: (day) { Navigator.of(context).push(MaterialPageRoute(builder: (_) => StandaloneDayEditor(day: day, onSave: updateDay))); }))); break;
+      case 'characters': Navigator.of(context).push(MaterialPageRoute(builder: (_) => CharacterLibraryScreen(days: days))); break;
+      case 'export': _exportStudies(); break;
+      case 'settings': openSettings(); break;
     }
+  }
+  Future<void> _exportStudies() async {
+    final sorted=[...days]..sort((a,b)=>b.dateKey.compareTo(a.dateKey));
+    final b=StringBuffer('BITANIYA BIBLE STUDY\n\n');
+    for(final d in sorted){
+      b.writeln('DATE: ${prettyStudyDate(d.dateKey)}');
+      for(final c in d.chapters){
+        b.writeln('\n${c.reference.isEmpty?'Chapter':c.reference}');
+        final fields={'Key verse':c.keyVerse,'Summary':c.summary,'Observations':c.observations,'Meaning':c.meaning,'Lessons':c.lessons,'Application':c.application,'Questions':c.questions,'Prayer':c.prayer,'Character':c.characterName,'Character lessons':c.characterLessons};
+        for(final e in fields.entries){if(e.value.trim().isNotEmpty)b.writeln('${e.key}: ${e.value.trim()}');}
+      }
+      b.writeln('\n----------------------------------------\n');
+    }
+    if(!mounted)return;
+    showDialog(context:context,builder:(ctx)=>AlertDialog(title:const Text('Export studies'),content:SizedBox(width:650,child:SingleChildScrollView(child:SelectableText(b.toString()))),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Close')),FilledButton.icon(onPressed:()async{await Clipboard.setData(ClipboardData(text:b.toString()));if(ctx.mounted)Navigator.pop(ctx);},icon:const Icon(Icons.copy),label:const Text('Copy'))]));
+  }
 
-    final pages = [
-      HomeScreen(
-        days: days,
-        onOpenDay: (day) {
-          final parts = day.dateKey.split('-');
-          if (parts.length == 3) {
-            selectedStudyDate = DateTime(
-              int.tryParse(parts[0]) ?? DateTime.now().year,
-              int.tryParse(parts[1]) ?? DateTime.now().month,
-              int.tryParse(parts[2]) ?? DateTime.now().day,
-            );
-          }
-          setState(() {
-            currentIndex = 1;
-          });
-        },
-        onDeleteDay: deleteDay,
-        onOpenSettings: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => SettingsScreen(
-                isDarkMode: widget.isDarkMode,
-                onThemeChanged: widget.onThemeChanged,
-              ),
-            ),
-          );
-        },
-        onStartStudy: () {
-          setState(() {
-            currentIndex = 1;
-          });
-        },
-      ),
-      DailyStudyScreen(
-        days: days,
-        onSaveDay: updateDay,
-        initialDate: selectedStudyDate,
-      ),
-      StudyCalendarScreen(
-        days: days,
-        onOpenDay: (date) {
-          setState(() {
-            selectedStudyDate = DateTime(date.year, date.month, date.day);
-            currentIndex = 1;
-          });
-        },
-      ),
-      StatsScreen(days: days),
-      BackupScreen(
-        days: days,
-        onRestored: loadData,
-      ),
+  @override Widget build(BuildContext context) {
+    if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final pages=<Widget>[
+      HomeScreen(days:days,onOpenStudy:()=>openPage(1),onOpenDay:(_)=>openPage(1),onDeleteDay:deleteDay,onOpenSettings:openSettings),
+      DailyStudyScreen(days:days,onSaveDay:updateDay),
+      StudyCalendarScreen(days:days),
+      BackupScreen(days:days,onRestored:loadData),
     ];
-
     return Scaffold(
-      body: SafeArea(
-        child: pages[currentIndex],
-      ),
-      bottomNavigationBar:
-          NavigationBar(
-        selectedIndex: currentIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            currentIndex = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: 'Study'),
-          NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Calendar'),
-          NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Stats'),
-          NavigationDestination(icon: Icon(Icons.backup_outlined), selectedIcon: Icon(Icons.backup), label: 'Backup'),
+      body: SafeArea(child: pages[currentIndex]),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex:currentIndex,
+        onDestinationSelected:openPage,
+        destinations:const [
+          NavigationDestination(icon:Icon(Icons.home_outlined),selectedIcon:Icon(Icons.home_rounded),label:'Home'),
+          NavigationDestination(icon:Icon(Icons.auto_stories_outlined),selectedIcon:Icon(Icons.auto_stories_rounded),label:'Study'),
+          NavigationDestination(icon:Icon(Icons.calendar_month_outlined),selectedIcon:Icon(Icons.calendar_month_rounded),label:'Calendar'),
+          NavigationDestination(icon:Icon(Icons.cloud_upload_outlined),selectedIcon:Icon(Icons.cloud_upload_rounded),label:'Backup'),
         ],
       ),
     );
   }
 }
-
-// ============================================================
-// HOME SCREEN
-// ============================================================
 
 class HomeScreen extends StatefulWidget {
-  final List<StudyDay> days;
-  final void Function(StudyDay day) onOpenDay;
-  final void Function(String dateKey) onDeleteDay;
-  final VoidCallback onOpenSettings;
-  final VoidCallback onStartStudy;
-
-  const HomeScreen({
-    super.key,
-    required this.days,
-    required this.onOpenDay,
-    required this.onDeleteDay,
-    required this.onOpenSettings,
-    required this.onStartStudy,
-  });
-
-  @override
-  State<HomeScreen> createState() =>
-      _HomeScreenState();
+  final List<StudyDay> days; final VoidCallback onOpenStudy; final void Function(StudyDay) onOpenDay; final void Function(String) onDeleteDay; final VoidCallback onOpenSettings;
+  const HomeScreen({super.key,required this.days,required this.onOpenStudy,required this.onOpenDay,required this.onDeleteDay,required this.onOpenSettings});
+  @override State<HomeScreen> createState()=>_HomeScreenState();
 }
-
-class _HomeScreenState extends State<HomeScreen> {
-  DateTime selectedDate = DateTime.now();
-
-  Map<String, Set<String>> progress = {};
-
-  bool loadingReading = true;
-
-  bool booksExpanded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    loadReadingProgress();
-  }
-
-  Future<void> loadReadingProgress() async {
-    final loaded =
-        await ReadingStorage.load();
-
-    if (!mounted) return;
-
-    setState(() {
-      progress = loaded;
-      loadingReading = false;
-    });
-  }
-
-  String get currentDateKey {
-    return ReadingStorage.dateKey(
-      selectedDate,
-    );
-  }
-
-  Set<String> get todayRead {
-    return progress[currentDateKey] ??
-        <String>{};
-  }
-
-  int get totalReadToday {
-    return todayRead.length;
-  }
-
-  int bookReadCount(BibleBook book) {
-    return todayRead
-        .where(
-          (id) =>
-              id.startsWith(
-                '${book.name}|',
-              ),
-        )
-        .length;
-  }
-
-  double get todayPercentage {
-    if (totalNewTestamentChapters == 0) {
-      return 0;
-    }
-
-    return totalReadToday /
-        totalNewTestamentChapters;
-  }
-
-  String formatDate(String dateKey) {
-    try {
-      final date =
-          DateTime.parse(dateKey);
-
-      return '${date.day}/'
-          '${date.month}/'
-          '${date.year}';
-    } catch (_) {
-      return dateKey;
-    }
-  }
-
-  Future<void> toggleChapter(
-    BibleBook book,
-    int chapter,
-  ) async {
-    final id =
-        '${book.name}|$chapter';
-
-    final set =
-        progress.putIfAbsent(
-      currentDateKey,
-      () => <String>{},
-    );
-
-    setState(() {
-      if (set.contains(id)) {
-        set.remove(id);
-      } else {
-        set.add(id);
-      }
-    });
-
-    await ReadingStorage.save(
-      progress,
-    );
-  }
-
-  Future<void> pickReadingDate() async {
-    final picked =
-        await showDatePicker(
-      context: context,
-      initialDate: selectedDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-
-    if (picked == null) return;
-
-    setState(() {
-      selectedDate = picked;
-    });
-  }
-
-  int get studyDays {
-    return widget.days.length;
-  }
-
-  int get studyChapterCount {
-    return widget.days.fold<int>(
-      0,
-      (sum, day) =>
-          sum + day.chapters.length,
-    );
-  }
-
-  int get studyStreak {
-    if (widget.days.isEmpty) return 0;
-    final dates = widget.days.map((d) => DateTime.tryParse(d.dateKey)).whereType<DateTime>().map((d) => DateTime(d.year, d.month, d.day)).toSet();
-    var day = DateTime.now();
-    day = DateTime(day.year, day.month, day.day);
-    var streak = 0;
-    while (dates.contains(day)) { streak++; day = day.subtract(const Duration(days: 1)); }
-    return streak;
-  }
-
-  Future<void> _showStudyExport(BuildContext context) async {
-    final sorted = [...widget.days]..sort((a, b) => b.dateKey.compareTo(a.dateKey));
-    final buffer = StringBuffer('BITANIYA BIBLE STUDY\n\n');
-    for (final day in sorted) {
-      buffer.writeln('DATE: ${prettyStudyDate(day.dateKey)}');
-      for (final c in day.chapters) {
-        buffer.writeln('\n${c.reference.isEmpty ? 'Chapter' : c.reference}');
-        final fields = <String, String>{
-          'Key verse': c.keyVerse,
-          'Summary': c.summary,
-          'Observations': c.observations,
-          'Meaning': c.meaning,
-          'Lessons': c.lessons,
-          'Application': c.application,
-          'Questions': c.questions,
-          'Prayer': c.prayer,
-          'Character': c.characterName,
-          'Character lessons': c.characterLessons,
-        };
-        for (final e in fields.entries) {
-          if (e.value.trim().isNotEmpty) buffer.writeln('${e.key}: ${e.value.trim()}');
-        }
-      }
-      buffer.writeln('\n----------------------------------------\n');
-    }
-    final text = buffer.toString();
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Export your studies'),
-        content: SizedBox(width: 650, child: SingleChildScrollView(child: SelectableText(text))),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close')),
-          FilledButton.icon(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: text));
-              if (dialogContext.mounted) Navigator.pop(dialogContext);
-              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Study export copied to clipboard.')));
-            },
-            icon: const Icon(Icons.copy),
-            label: const Text('Copy'),
-          ),
-        ],
+class _HomeScreenState extends State<HomeScreen>{
+  DateTime selectedDate=DateTime.now(); Map<String,Set<String>> progress={}; bool readingLoading=true; bool trackerOpen=false;
+  @override void initState(){super.initState();_loadReading();}
+  Future<void> _loadReading()async{final x=await ReadingStorage.load();if(!mounted)return;setState(() { progress = x; readingLoading = false; });}
+  String get dateKey=>ReadingStorage.dateKey(selectedDate); Set<String> get todayRead=>progress[dateKey]??<String>{};
+  int get studyDays=>widget.days.length; int get chapters=>widget.days.fold(0,(n,d)=>n+d.chapters.length); int get streak=>calculateStudyStreak(widget.days);
+  int bookRead(BibleBook b)=>todayRead.where((x)=>x.startsWith('${b.name}|')).length;
+  Future<void> toggle(BibleBook b,int ch)async{final set=progress.putIfAbsent(dateKey,()=>{});final id='${b.name}|$ch';setState(() { if (set.contains(id)) { set.remove(id); } else { set.add(id); } });await ReadingStorage.save(progress);}
+  Future<void> pickDate()async{final d=await showDatePicker(context:context,initialDate:selectedDate,firstDate:DateTime(2000),lastDate:DateTime(2100));if(d!=null)setState(()=>selectedDate=d);}
+  void more(String v){switch(v){case 'search':Navigator.push(context,MaterialPageRoute(builder:(_)=>StudySearchScreen(days:widget.days)));break;case 'bookmarks':Navigator.push(context,MaterialPageRoute(builder:(_)=>StudyLibraryScreen(days:widget.days,favoritesOnly:false)));break;case 'favorites':Navigator.push(context,MaterialPageRoute(builder:(_)=>StudyLibraryScreen(days:widget.days,favoritesOnly:true)));break;case 'calendar':Navigator.push(context,MaterialPageRoute(builder:(_)=>StudyCalendarScreen(days:widget.days)));break;case 'characters':Navigator.push(context,MaterialPageRoute(builder:(_)=>CharacterLibraryScreen(days:widget.days)));break;case 'export':_export();break;case 'settings':widget.onOpenSettings();break;}}
+  Future<void> _export()async{final b=StringBuffer();for(final d in widget.days){b.writeln(prettyStudyDate(d.dateKey));for(final c in d.chapters){b.writeln(c.reference);b.writeln(c.summary);b.writeln();}}await Clipboard.setData(ClipboardData(text:b.toString()));if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Studies copied to clipboard.')));}
+  @override Widget build(BuildContext context){
+    final theme=Theme.of(context), scheme=theme.colorScheme; final sorted=[...widget.days]..sort((a,b)=>b.dateKey.compareTo(a.dateKey)); final recent=sorted.take(3).toList(); final latest=recent.isEmpty?null:recent.first;
+    final ntPercent=totalNewTestamentChapters==0?0.0:todayRead.length/totalNewTestamentChapters;
+    return CustomScrollView(slivers:[
+      SliverAppBar(pinned:true,backgroundColor:theme.scaffoldBackgroundColor,surfaceTintColor:Colors.transparent,title:Row(children:[Container(width:38,height:38,decoration:BoxDecoration(color:scheme.primary,borderRadius:BorderRadius.circular(12)),child:Icon(Icons.menu_book_rounded,color:scheme.onPrimary,size:22)),const SizedBox(width:10),const Text('Bitaniya Bible Study',style:TextStyle(fontWeight:FontWeight.w800,letterSpacing:-.4))]),actions:[PopupMenuButton<String>(icon:const Icon(Icons.more_vert_rounded),onSelected:more,itemBuilder:(_)=>const [PopupMenuItem(value:'search',child:ListTile(leading:Icon(Icons.search),title:Text('Search'))),PopupMenuItem(value:'bookmarks',child:ListTile(leading:Icon(Icons.bookmark_border),title:Text('Bookmarks'))),PopupMenuItem(value:'favorites',child:ListTile(leading:Icon(Icons.star_border),title:Text('Favorites'))),PopupMenuItem(value:'calendar',child:ListTile(leading:Icon(Icons.calendar_month_outlined),title:Text('Calendar'))),PopupMenuItem(value:'characters',child:ListTile(leading:Icon(Icons.person_outline),title:Text('Characters'))),PopupMenuItem(value:'export',child:ListTile(leading:Icon(Icons.ios_share_outlined),title:Text('Export'))),PopupMenuItem(value:'settings',child:ListTile(leading:Icon(Icons.settings_outlined),title:Text('Settings')))])],
       ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final sorted = [...widget.days]..sort((a, b) => b.dateKey.compareTo(a.dateKey));
-    final recent = sorted.take(3).toList();
-    return CustomScrollView(slivers: [
-      SliverAppBar.large(pinned: true, title: const Text('Bitaniya Bible Study'), actions: [
-        PopupMenuButton<String>(
-          tooltip: 'More', icon: const Icon(Icons.more_vert),
-          onSelected: (value) {
-            switch (value) {
-              case 'start': widget.onStartStudy(); break;
-              case 'search': Navigator.of(context).push(MaterialPageRoute(builder: (_) => StudySearchScreen(days: widget.days))); break;
-              case 'calendar': Navigator.of(context).push(MaterialPageRoute(builder: (_) => StudyCalendarScreen(days: widget.days))); break;
-              case 'characters': Navigator.of(context).push(MaterialPageRoute(builder: (_) => CharacterLibraryScreen(days: widget.days))); break;
-              case 'bookmarks': Navigator.of(context).push(MaterialPageRoute(builder: (_) => StudyLibraryScreen(days: widget.days, favoritesOnly: false))); break;
-              case 'favorites': Navigator.of(context).push(MaterialPageRoute(builder: (_) => StudyLibraryScreen(days: widget.days, favoritesOnly: true))); break;
-              case 'export': _showStudyExport(context); break;
-              case 'settings': widget.onOpenSettings(); break;
-            }
-          },
-          itemBuilder: (context) => const [
-            PopupMenuItem(value: 'start', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.play_arrow), title: Text("Start Today's Study"))),
-            PopupMenuDivider(),
-            PopupMenuItem(value: 'search', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.search), title: Text('Search Studies'))),
-                PopupMenuItem(value: 'calendar', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.calendar_month), title: Text('Study Calendar'))),
-            PopupMenuItem(value: 'characters', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.person_outline), title: Text('Character Library'))),
-            PopupMenuItem(value: 'bookmarks', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.bookmark_border), title: Text('Bookmarks'))),
-            PopupMenuItem(value: 'favorites', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.star_border), title: Text('Favorites'))),
-            PopupMenuItem(value: 'export', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.ios_share_outlined), title: Text('Export Studies'))),
-            PopupMenuDivider(),
-            PopupMenuItem(value: 'settings', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.settings_outlined), title: Text('Settings'))),
-          ],
-        ),
-      ]),
-      SliverPadding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 28), sliver: SliverList(delegate: SliverChildListDelegate([
-        Card(child: InkWell(borderRadius: BorderRadius.circular(12), onTap: widget.onStartStudy, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16), child: Row(children: [
-          Icon(Icons.play_circle_fill, size: 30, color: theme.colorScheme.primary), const SizedBox(width: 14),
-          const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("Today's Study", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), SizedBox(height: 3), Text('Continue your Bible study', style: TextStyle(fontSize: 13))])),
-          Icon(Icons.arrow_forward_ios, size: 16, color: theme.colorScheme.onSurfaceVariant),
-        ])))),
-        const SizedBox(height: 18),
-        Text('Your progress', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        Card(child: Padding(padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8), child: Row(children: [
-          Expanded(child: _TopProgressItem(icon: Icons.calendar_today_outlined, value: '$studyDays', label: 'Study days')),
-          _homeDivider(context),
-          Expanded(child: _TopProgressItem(icon: Icons.menu_book_outlined, value: '$studyChapterCount', label: 'Chapters')),
-          _homeDivider(context),
-          Expanded(child: _TopProgressItem(icon: Icons.local_fire_department_outlined, value: '$studyStreak', label: 'Streak')),
-        ]))),
-        const SizedBox(height: 22),
-        Row(children: [Expanded(child: Text('New Testament', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))), TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => NewTestamentTrackerScreen(initialProgress: progress))), child: const Text('View'))]),
-        const SizedBox(height: 7),
-        Text('${(todayPercentage * 100).toStringAsFixed(1)}% completed • $totalReadToday / $totalNewTestamentChapters chapters', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-        const SizedBox(height: 8), LinearProgressIndicator(value: todayPercentage), const SizedBox(height: 22),
-        Row(children: [Expanded(child: Text('Recent studies', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))), if (sorted.isNotEmpty) Text('${sorted.length} total', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))]),
-        const SizedBox(height: 9),
-        if (recent.isEmpty) const _EmptyCard(icon: Icons.menu_book_outlined, title: 'No studies yet', message: 'Start your first Bible study from the Study tab.')
-        else ...recent.map((day) => Card(margin: const EdgeInsets.only(bottom: 8), child: ListTile(leading: const CircleAvatar(child: Icon(Icons.menu_book_outlined)), title: Text(day.chapters.isEmpty ? 'Bible study' : (day.chapters.first.reference.isEmpty ? 'Bible study' : day.chapters.first.reference), maxLines: 1, overflow: TextOverflow.ellipsis), subtitle: Text(formatDate(day.dateKey)), trailing: PopupMenuButton<String>(onSelected: (v) { if (v == 'open') widget.onOpenDay(day); if (v == 'delete') _confirmDelete(context, day); }, itemBuilder: (_) => const [PopupMenuItem(value: 'open', child: Text('Open')), PopupMenuItem(value: 'delete', child: Text('Delete'))]), onTap: () => widget.onOpenDay(day)))),
-      ]))),
+      SliverPadding(padding:const EdgeInsets.fromLTRB(18,8,18,32),sliver:SliverList(delegate:SliverChildListDelegate([
+        Container(decoration:BoxDecoration(gradient:LinearGradient(colors:[scheme.primary,Color.lerp(scheme.primary,scheme.tertiary,0.5)!]),borderRadius:BorderRadius.circular(28)),padding:const EdgeInsets.all(24),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('TODAY’S STUDY',style:TextStyle(color:scheme.onPrimary.withOpacity(.78),fontSize:12,fontWeight:FontWeight.w800,letterSpacing:1.5)),const SizedBox(height:10),Text(latest==null?'Ready to study?':'Continue your study',style:TextStyle(color:scheme.onPrimary,fontSize:28,fontWeight:FontWeight.w800,letterSpacing:-.8)),const SizedBox(height:7),Text(latest==null?'Set aside a few quiet minutes for Scripture.':'Your latest study is ${prettyStudyDate(latest.dateKey)}.',style:TextStyle(color:scheme.onPrimary.withOpacity(.84),fontSize:14)),const SizedBox(height:20),SizedBox(width:double.infinity,child:FilledButton(onPressed:widget.onOpenStudy,style:FilledButton.styleFrom(backgroundColor:scheme.onPrimary,foregroundColor:scheme.primary,padding:const EdgeInsets.symmetric(vertical:15),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(16))),child:const Text('START TODAY’S STUDY',style:TextStyle(fontWeight:FontWeight.w800,letterSpacing:.5))))]),
+        const SizedBox(height:22),_sectionLabel('YOUR PROGRESS'),const SizedBox(height:10),Container(decoration:BoxDecoration(color:scheme.surface,borderRadius:BorderRadius.circular(22),border:Border.all(color:scheme.outlineVariant.withOpacity(.5))),padding:const EdgeInsets.symmetric(vertical:18),child:Row(children:[_stat('Study days','$studyDays',Icons.calendar_today_outlined),_vline(scheme),_stat('Chapters','$chapters',Icons.menu_book_outlined),_vline(scheme),_stat('Streak','$streak',Icons.local_fire_department_outlined)])),
+        const SizedBox(height:22),Container(decoration:BoxDecoration(color:scheme.surface,borderRadius:BorderRadius.circular(22),border:Border.all(color:scheme.outlineVariant.withOpacity(.5))),padding:const EdgeInsets.all(18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Row(children:[Container(width:42,height:42,decoration:BoxDecoration(color:scheme.primaryContainer,borderRadius:BorderRadius.circular(13)),child:Icon(Icons.auto_stories_rounded,color:scheme.primary)),const SizedBox(width:12),const Expanded(child:Text('New Testament',style:TextStyle(fontSize:18,fontWeight:FontWeight.w800))),Text('${(ntPercent*100).round()}%',style:TextStyle(color:scheme.primary,fontWeight:FontWeight.w800)),]),const SizedBox(height:13),Text('${todayRead.length} of $totalNewTestamentChapters chapters',style:TextStyle(color:scheme.onSurfaceVariant)),const SizedBox(height:9),ClipRRect(borderRadius:BorderRadius.circular(10),child:LinearProgressIndicator(value:ntPercent,minHeight:8)),const SizedBox(height:12),Row(children:[Text('Reading date: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',style:TextStyle(fontSize:12,color:scheme.onSurfaceVariant)),const Spacer(),IconButton(onPressed:pickDate,icon:const Icon(Icons.edit_calendar_outlined)),IconButton(onPressed:()=>setState(()=>trackerOpen=!trackerOpen),icon:Icon(trackerOpen?Icons.expand_less:Icons.expand_more))]),if(trackerOpen) ...newTestamentBooks.map((b)=>_book(b,scheme))]),
+        const SizedBox(height:24),Row(children:[Expanded(child:_sectionLabel('RECENT STUDIES')),if(recent.isNotEmpty)Text('${sorted.length} total',style:TextStyle(fontSize:12,color:scheme.onSurfaceVariant,fontWeight:FontWeight.w600))]),const SizedBox(height:10),
+        if(recent.isEmpty)_EmptyCard(icon:Icons.auto_stories_outlined,title:'No studies yet',message:'Saved studies will appear here.') else ...recent.map((d)=>_recent(d)),
+      ])))
     ]);
   }
-
-  Widget _homeDivider(BuildContext context) => Container(width: 1, height: 34, color: Theme.of(context).colorScheme.outlineVariant);
-
-  Widget _buildBookCard(
-    BibleBook book,
-  ) {
-    final read =
-        bookReadCount(book);
-
-    final percentage =
-        book.chapters == 0
-            ? 0.0
-            : read / book.chapters;
-
-    return Padding(
-      padding:
-          const EdgeInsets.fromLTRB(
-        10,
-        0,
-        10,
-        8,
-      ),
-      child: Card(
-        child: ExpansionTile(
-          initiallyExpanded: false,
-          leading: CircleAvatar(
-            child: Text(
-              '$read',
-              style:
-                  const TextStyle(
-                fontSize: 13,
-                fontWeight:
-                    FontWeight.bold,
-              ),
-            ),
-          ),
-          title: Text(
-            book.name,
-            style:
-                const TextStyle(
-              fontWeight:
-                  FontWeight.w700,
-            ),
-          ),
-          subtitle: Text(
-            '$read / ${book.chapters}',
-          ),
-          childrenPadding:
-              const EdgeInsets.fromLTRB(
-            16,
-            0,
-            16,
-            16,
-          ),
-          children: [
-            LinearProgressIndicator(
-              value: percentage,
-              minHeight: 6,
-            ),
-            const SizedBox(
-              height: 12,
-            ),
-            GridView.builder(
-              shrinkWrap: true,
-              physics:
-                  const NeverScrollableScrollPhysics(),
-              gridDelegate:
-                  const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                childAspectRatio: 1.4,
-              ),
-              itemCount:
-                  book.chapters,
-              itemBuilder:
-                  (context, index) {
-                final chapter =
-                    index + 1;
-
-                final id =
-                    '${book.name}|$chapter';
-
-                final isRead =
-                    todayRead.contains(
-                  id,
-                );
-
-                return InkWell(
-                  borderRadius:
-                      BorderRadius.circular(
-                    10,
-                  ),
-                  onTap: () {
-                    toggleChapter(
-                      book,
-                      chapter,
-                    );
-                  },
-                  child: Container(
-                    decoration:
-                        BoxDecoration(
-                      color: isRead
-                          ? Theme.of(
-                              context,
-                            )
-                              .colorScheme
-                              .primary
-                          : Theme.of(
-                              context,
-                            )
-                              .colorScheme
-                              .surfaceContainerHighest,
-                      borderRadius:
-                          BorderRadius.circular(
-                        10,
-                      ),
-                      border:
-                          Border.all(
-                        color: isRead
-                            ? Theme.of(
-                                context,
-                              )
-                                .colorScheme
-                                .primary
-                            : Theme.of(
-                                context,
-                              )
-                                .colorScheme
-                                .outline
-                                .withOpacity(
-                                  0.3,
-                                ),
-                      ),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment:
-                            MainAxisAlignment
-                                .center,
-                        children: [
-                          Icon(
-                            isRead
-                                ? Icons
-                                    .check_circle
-                                : Icons
-                                    .circle_outlined,
-                            size: 20,
-                            color: isRead
-                                ? Theme.of(
-                                    context,
-                                  )
-                                    .colorScheme
-                                    .onPrimary
-                                : Theme.of(
-                                    context,
-                                  )
-                                    .colorScheme
-                                    .onSurface,
-                          ),
-                          const SizedBox(
-                            height: 3,
-                          ),
-                          Text(
-                            'Ch. $chapter',
-                            style:
-                                TextStyle(
-                              fontSize: 12,
-                              fontWeight:
-                                  FontWeight
-                                      .bold,
-                              color: isRead
-                                  ? Theme.of(
-                                      context,
-                                    )
-                                      .colorScheme
-                                      .onPrimary
-                                  : null,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _confirmDelete(
-    BuildContext context,
-    StudyDay day,
-  ) async {
-    final answer =
-        await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text(
-            'Delete study?',
-          ),
-          content: Text(
-            'Delete the study for '
-            '${formatDate(day.dateKey)}?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  false,
-                );
-              },
-              child:
-                  const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  true,
-                );
-              },
-              child:
-                  const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (answer == true) {
-      widget.onDeleteDay(
-        day.dateKey,
-      );
-    }
-  }
-}
-
-// ============================================================
-// SIMPLE HOME TOP PROGRESS ITEM
-// ============================================================
-
-
-class NewTestamentTrackerScreen extends StatefulWidget {
-  final Map<String, Set<String>> initialProgress;
-  const NewTestamentTrackerScreen({super.key, required this.initialProgress});
-  @override State<NewTestamentTrackerScreen> createState() => _NewTestamentTrackerScreenState();
-}
-
-class _NewTestamentTrackerScreenState extends State<NewTestamentTrackerScreen> {
-  late Map<String, Set<String>> progress;
-  DateTime selectedDate = DateTime.now();
-  final Set<String> expandedBooks = <String>{};
-  @override void initState() { super.initState(); progress = widget.initialProgress.map((k,v)=>MapEntry(k,Set<String>.from(v))); _load(); }
-  Future<void> _load() async { final loaded=await ReadingStorage.load(); if(mounted) setState(()=>progress=loaded); }
-  String get dateKey => ReadingStorage.dateKey(selectedDate);
-  Set<String> get selected => progress[dateKey] ?? <String>{};
-  int count(BibleBook b)=>selected.where((id)=>id.startsWith('${b.name}|')).length;
-  Future<void> toggle(BibleBook b,int c) async { final set=progress.putIfAbsent(dateKey,()=> <String>{}); final id='${b.name}|$c'; setState(()=>set.contains(id)?set.remove(id):set.add(id)); await ReadingStorage.save(progress); }
-  Future<void> pickDate() async { final d=await showDatePicker(context:context,initialDate:selectedDate,firstDate:DateTime(2000),lastDate:DateTime(2100)); if(d!=null)setState(()=>selectedDate=d); }
-  @override Widget build(BuildContext context){ final total=selected.length; final pct=totalNewTestamentChapters==0?0.0:total/totalNewTestamentChapters; return Scaffold(appBar:AppBar(title:const Text('New Testament Tracker'),actions:[IconButton(onPressed:pickDate,icon:const Icon(Icons.calendar_month_outlined))]),body:ListView(padding:const EdgeInsets.all(16),children:[Text('${(pct*100).toStringAsFixed(1)}% completed',style:const TextStyle(fontSize:21,fontWeight:FontWeight.w800)),const SizedBox(height:5),Text('${selectedDate.day}/${selectedDate.month}/${selectedDate.year} • $total / $totalNewTestamentChapters chapters'),const SizedBox(height:10),LinearProgressIndicator(value:pct),const SizedBox(height:18),...newTestamentBooks.map((book){final open=expandedBooks.contains(book.name);return Card(margin:const EdgeInsets.only(bottom:8),clipBehavior:Clip.antiAlias,child:Column(children:[ListTile(leading:const Icon(Icons.menu_book_outlined),title:Text(book.name,style:const TextStyle(fontWeight:FontWeight.w700)),subtitle:Text('${count(book)} / ${book.chapters} chapters studied'),trailing:Icon(open?Icons.keyboard_arrow_up:Icons.keyboard_arrow_down),onTap:()=>setState(()=>open?expandedBooks.remove(book.name):expandedBooks.add(book.name))),if(open)Padding(padding:const EdgeInsets.fromLTRB(12,0,12,14),child:Wrap(spacing:7,runSpacing:7,children:List.generate(book.chapters,(i){final c=i+1;final done=selected.contains('${book.name}|$c');return FilterChip(label:Text('$c'),selected:done,onSelected:(_)=>toggle(book,c));})))]));})])); }
-}
-
-class _TopProgressItem extends StatelessWidget {
-  final IconData icon;
-  final String value;
-  final String label;
-
-  const _TopProgressItem({required this.icon, required this.value, this.label = ''});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(children: [
-      Icon(icon, size: 23),
-      const SizedBox(height: 5),
-      Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 2),
-      Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-    ]);
-  }
-}
-
-// ============================================================
-// EMPTY CARD
-// ============================================================
-
-class _EmptyCard
-    extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String message;
-
-  const _EmptyCard({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding:
-            const EdgeInsets.all(28),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              size: 48,
-              color: Colors.grey,
-            ),
-            const SizedBox(
-              height: 12,
-            ),
-            Text(
-              title,
-              style:
-                  const TextStyle(
-                fontSize: 19,
-                fontWeight:
-                    FontWeight.bold,
-              ),
-            ),
-            const SizedBox(
-              height: 6,
-            ),
-            Text(
-              message,
-              textAlign:
-                  TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _sectionLabel(String text)=>Text(text,style:TextStyle(fontSize:12,fontWeight:FontWeight.w800,letterSpacing:1.5,color:Theme.of(context).colorScheme.onSurfaceVariant));
+  Widget _stat(String label,String value,IconData icon){final s=Theme.of(context).colorScheme;return Expanded(child:Column(children:[Icon(icon,size:19,color:s.primary),const SizedBox(height:7),Text(value,style:const TextStyle(fontSize:23,fontWeight:FontWeight.w800)),const SizedBox(height:2),Text(label,style:TextStyle(fontSize:11,color:s.onSurfaceVariant,fontWeight:FontWeight.w600))]));}
+  Widget _vline(ColorScheme s)=>Container(width:1,height:42,color:s.outlineVariant);
+  Widget _recent(StudyDay d){final s=Theme.of(context).colorScheme;final refs=d.chapters.map((c)=>c.reference.trim()).where((x)=>x.isNotEmpty).join(' • ');return Container(margin:const EdgeInsets.only(bottom:9),decoration:BoxDecoration(color:s.surface,borderRadius:BorderRadius.circular(18),border:Border.all(color:s.outlineVariant.withOpacity(.5))),child:ListTile(contentPadding:const EdgeInsets.symmetric(horizontal:16,vertical:4),leading:Container(width:42,height:42,decoration:BoxDecoration(color:s.primaryContainer,borderRadius:BorderRadius.circular(13)),child:Center(child:Text('${d.chapters.length}',style:TextStyle(color:s.primary,fontWeight:FontWeight.w800)))),title:Text(refs.isEmpty?'Bible study':refs,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text(prettyStudyDate(d.dateKey),style:TextStyle(color:s.onSurfaceVariant)),trailing:const Icon(Icons.arrow_forward_ios_rounded,size:15),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>StandaloneDayEditor(day:d,onSave:widget.onOpenDay))));}
+  Widget _book(BibleBook b,ColorScheme s){final read=bookRead(b);return Container(margin:const EdgeInsets.only(top:8),decoration:BoxDecoration(color:s.surfaceContainerHighest.withOpacity(.35),borderRadius:BorderRadius.circular(16)),child:ExpansionTile(title:Text(b.name,style:const TextStyle(fontWeight:FontWeight.w700)),subtitle:Text('$read / ${b.chapters} chapters'),leading:CircleAvatar(backgroundColor:s.primaryContainer,child:Text('$read',style:TextStyle(color:s.primary,fontSize:12,fontWeight:FontWeight.w800))),childrenPadding:const EdgeInsets.fromLTRB(14,0,14,14),children:[GridView.builder(shrinkWrap:true,physics:const NeverScrollableScrollPhysics(),itemCount:b.chapters,gridDelegate:const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount:5,crossAxisSpacing:6,mainAxisSpacing:6,childAspectRatio:1.35),itemBuilder:(_,i){final ch=i+1;final on=todayRead.contains('${b.name}|$ch');return InkWell(borderRadius:BorderRadius.circular(10),onTap:()=>toggle(b,ch),child:AnimatedContainer(duration:const Duration(milliseconds:150),decoration:BoxDecoration(color:on?s.primary:s.surface,borderRadius:BorderRadius.circular(10),border:Border.all(color:on?s.primary:s.outlineVariant)),child:Center(child:Text('$ch',style:TextStyle(fontSize:11,fontWeight:FontWeight.w800,color:on?s.onPrimary:null)))));})]));}
 }
 
 // ============================================================
@@ -1813,11 +1150,86 @@ class SettingsScreen
 }
 
 class _StatMini extends StatelessWidget {
+  final IconData icon;
   final String label;
   final String value;
-  const _StatMini({required this.label, required this.value});
+
+  const _StatMini({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
   @override
-  Widget build(BuildContext context) => Column(children: [Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)), const SizedBox(height: 3), Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))]);
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================
+// DASHBOARD QUICK ACTIONS
+// ============================================================
+
+class _DashboardQuickActions extends StatelessWidget {
+  final List<StudyDay> days;
+  final VoidCallback onSearch;
+  final VoidCallback onBookmarks;
+  final VoidCallback onFavorites;
+  final VoidCallback onCalendar;
+  final VoidCallback onCharacters;
+  final VoidCallback onExport;
+
+  const _DashboardQuickActions({required this.days, required this.onSearch, required this.onBookmarks, required this.onFavorites, required this.onCalendar, required this.onCharacters, required this.onExport});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _quick(context, Icons.search, 'Search', onSearch),
+            _quick(context, Icons.bookmark_border, 'Bookmarks', onBookmarks),
+            _quick(context, Icons.star_border, 'Favorites', onFavorites),
+            _quick(context, Icons.calendar_month, 'Calendar', onCalendar),
+            _quick(context, Icons.person_outline, 'Characters', onCharacters),
+            _quick(context, Icons.ios_share_outlined, 'Export', onExport),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _quick(BuildContext context, IconData icon, String label, VoidCallback onTap) {
+    return ActionChip(avatar: Icon(icon, size: 18), label: Text(label), onPressed: onTap);
+  }
 }
 
 // ============================================================
@@ -2010,8 +1422,7 @@ class CharacterLibraryScreen extends StatelessWidget {
 
 class StudyCalendarScreen extends StatefulWidget {
   final List<StudyDay> days;
-  final void Function(DateTime date) onOpenDay;
-  const StudyCalendarScreen({super.key, required this.days, required this.onOpenDay});
+  const StudyCalendarScreen({super.key, required this.days});
   @override State<StudyCalendarScreen> createState() => _StudyCalendarScreenState();
 }
 
@@ -2068,9 +1479,7 @@ class _StudyCalendarScreenState extends State<StudyCalendarScreen> {
               final isSelected = selected != null && ReadingStorage.dateKey(selected!) == ReadingStorage.dateKey(d);
               return InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () {
-                  setState(() => selected = d);
-                },
+                onTap: () => setState(() => selected = d),
                 child: Container(
                   decoration: BoxDecoration(color: isSelected ? Theme.of(context).colorScheme.primary : studied ? Theme.of(context).colorScheme.primaryContainer : null, borderRadius: BorderRadius.circular(12), border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(.25))),
                   child: Center(child: Text('${d.day}', style: TextStyle(fontWeight: studied || isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Theme.of(context).colorScheme.onPrimary : null))),
@@ -2087,12 +1496,6 @@ class _StudyCalendarScreenState extends State<StudyCalendarScreen> {
             Text('${selectedDay.chapters.length} chapter${selectedDay.chapters.length == 1 ? '' : 's'} studied'),
             const SizedBox(height: 8),
             ...selectedDay.chapters.map((c) => ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.menu_book_outlined), title: Text(c.reference.isEmpty ? 'Untitled chapter' : c.reference), subtitle: Text(c.summary.isEmpty ? 'No summary' : c.summary, maxLines: 2, overflow: TextOverflow.ellipsis))),
-            const SizedBox(height: 8),
-            FilledButton.icon(
-              onPressed: () => widget.onOpenDay(selected!),
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Open this study'),
-            ),
           ])))
         else
           const _EmptyCard(icon: Icons.touch_app_outlined, title: 'Choose a day', message: 'Tap a date to see what you studied.'),
@@ -2104,112 +1507,12 @@ class _StudyCalendarScreenState extends State<StudyCalendarScreen> {
 }
 
 // ============================================================
-// STATS SCREEN
-// ============================================================
-
-class StatsScreen extends StatelessWidget {
-  final List<StudyDay> days;
-  const StatsScreen({super.key, required this.days});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final chapters = days.fold<int>(0, (sum, d) => sum + d.chapters.length);
-    final streak = calculateStudyStreak(days);
-    final totalWords = days.fold<int>(0, (sum, d) {
-      return sum + d.chapters.fold<int>(0, (inner, c) {
-        return inner + [c.keyVerse, c.summary, c.observations, c.meaning, c.lessons,
-          c.application, c.questions, c.prayer, c.characterName, c.characterWho,
-          c.characterTraits, c.characterActions, c.characterLessons]
-            .fold<int>(0, (n, text) => n + text.trim().split(RegExp(r'\s+')).where((x) => x.isNotEmpty).length);
-      });
-    });
-    final completedFields = days.fold<int>(0, (sum, d) => sum + d.chapters.fold<int>(0, (inner, c) => inner + [
-      c.keyVerse, c.summary, c.observations, c.meaning, c.lessons, c.application,
-      c.questions, c.prayer, c.characterName, c.characterWho, c.characterTraits,
-      c.characterActions, c.characterLessons,
-    ].where((x) => x.trim().isNotEmpty).length));
-    final maxFields = chapters * 13;
-    final completion = maxFields == 0 ? 0.0 : completedFields / maxFields;
-
-    final monthCounts = <String, int>{};
-    for (final d in days) {
-      if (d.dateKey.length >= 7) monthCounts[d.dateKey.substring(0, 7)] = (monthCounts[d.dateKey.substring(0, 7)] ?? 0) + 1;
-    }
-    final recentMonths = monthCounts.entries.toList()..sort((a, b) => b.key.compareTo(a.key));
-
-    return CustomScrollView(slivers: [
-      const SliverAppBar.large(title: Text('Your Stats')),
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-        sliver: SliverList(delegate: SliverChildListDelegate([
-          Row(children: [
-            Expanded(child: _StatCard(icon: Icons.calendar_today, value: '${days.length}', label: 'Study days')),
-            const SizedBox(width: 10),
-            Expanded(child: _StatCard(icon: Icons.menu_book, value: '$chapters', label: 'Chapters')),
-            const SizedBox(width: 10),
-            Expanded(child: _StatCard(icon: Icons.local_fire_department, value: '$streak', label: 'Day streak')),
-          ]),
-          const SizedBox(height: 16),
-          Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Study completion', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 14),
-            LinearProgressIndicator(value: completion),
-            const SizedBox(height: 9),
-            Text('${(completion * 100).round()}% of chapter study fields completed'),
-          ]))),
-          const SizedBox(height: 16),
-          Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Writing activity', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 14),
-            Row(children: [const Icon(Icons.edit_note), const SizedBox(width: 12), Text('$totalWords words recorded')]),
-          ]))),
-          const SizedBox(height: 16),
-          Text('Study days by month', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 8),
-          if (recentMonths.isEmpty)
-            const _EmptyCard(icon: Icons.insights_outlined, title: 'No statistics yet', message: 'Complete your first study to start tracking your progress.')
-          else
-            ...recentMonths.take(6).map((e) => Card(margin: const EdgeInsets.only(bottom: 8), child: ListTile(
-              leading: const Icon(Icons.calendar_month_outlined),
-              title: Text(_formatMonth(e.key)),
-              trailing: Text('${e.value}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-              subtitle: Text(e.value == 1 ? 'study day' : 'study days'),
-            ))),
-        ])),
-      ),
-    ]);
-  }
-
-  static String _formatMonth(String key) {
-    final parts = key.split('-');
-    if (parts.length != 2) return key;
-    const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    final m = int.tryParse(parts[1]);
-    return m != null && m >= 1 && m <= 12 ? '${names[m - 1]} ${parts[0]}' : key;
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final IconData icon;
-  final String value;
-  final String label;
-  const _StatCard({required this.icon, required this.value, required this.label});
-  @override
-  Widget build(BuildContext context) => Card(child: Padding(padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8), child: Column(children: [
-    Icon(icon, size: 24), const SizedBox(height: 7), Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-    const SizedBox(height: 3), Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11)),
-  ])));
-}
-
-// ============================================================
 // DAILY STUDY SCREEN
 // ============================================================
 
 class DailyStudyScreen
     extends StatefulWidget {
   final List<StudyDay> days;
-  final DateTime initialDate;
   final void Function(
     StudyDay day,
   ) onSaveDay;
@@ -2218,7 +1521,6 @@ class DailyStudyScreen
     super.key,
     required this.days,
     required this.onSaveDay,
-    required this.initialDate,
   });
 
   @override
@@ -2237,7 +1539,7 @@ class _DailyStudyScreenState
     super.initState();
 
     selectedDate =
-        DateTime(widget.initialDate.year, widget.initialDate.month, widget.initialDate.day);
+        DateTime.now();
 
     _loadSelectedDay();
   }
@@ -2370,200 +1672,63 @@ class _DailyStudyScreenState
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    final day =
-        currentDay;
-
-    if (day == null) {
-      return const Center(
-        child:
-            CircularProgressIndicator(),
-      );
-    }
-
+  Widget build(BuildContext context) {
+    final day = currentDay;
+    if (day == null) return const Center(child: CircularProgressIndicator());
+    final scheme = Theme.of(context).colorScheme;
     return WillPopScope(
-      onWillPop: () async {
-        _autoSave();
-        return true;
-      },
-      child:
-          CustomScrollView(
+      onWillPop: () async { _autoSave(); return true; },
+      child: CustomScrollView(
         slivers: [
           SliverAppBar(
             pinned: true,
-            title:
-                const Text(
-              'Daily Study',
-            ),
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            surfaceTintColor: Colors.transparent,
+            title: const Text('Study', style: TextStyle(fontWeight: FontWeight.w800)),
             actions: [
-              IconButton(
-                tooltip:
-                    'Save',
-                onPressed:
-                    _autoSave,
-                icon:
-                    const Icon(
-                  Icons.save_outlined,
-                ),
-              ),
+              IconButton(onPressed: _autoSave, tooltip: 'Save', icon: const Icon(Icons.check_rounded)),
+              const SizedBox(width: 4),
             ],
           ),
           SliverPadding(
-            padding:
-                const EdgeInsets.fromLTRB(
-              16,
-              12,
-              16,
-              30,
-            ),
-            sliver: SliverList(
-              delegate:
-                  SliverChildListDelegate(
-                [
-                  _buildDayHeader(),
-                  const SizedBox(
-                    height: 16,
-                  ),
-                  if (day.chapters.isEmpty)
-                    Card(
-                      child:
-                          Padding(
-                        padding:
-                            const EdgeInsets.all(
-                          22,
-                        ),
-                        child:
-                            Column(
-                          children: [
-                            Icon(
-                              Icons
-                                  .menu_book_outlined,
-                              size: 42,
-                              color: Theme.of(
-                                context,
-                              )
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                            const SizedBox(
-                              height: 10,
-                            ),
-                            const Text(
-                              'No chapters yet',
-                              style:
-                                  TextStyle(
-                                fontSize:
-                                    18,
-                                fontWeight:
-                                    FontWeight
-                                        .bold,
-                              ),
-                            ),
-                            const SizedBox(
-                              height: 6,
-                            ),
-                            const Text(
-                              'Add a chapter when you are ready.',
-                              textAlign:
-                                  TextAlign
-                                      .center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ...List.generate(
-                    day.chapters.length,
-                    (index) {
-                      final chapter =
-                          day.chapters[
-                              index];
-
-                      return Padding(
-                        padding:
-                            const EdgeInsets.only(
-                          bottom: 14,
-                        ),
-                        child:
-                            ChapterCard(
-                          key: ValueKey(
-                            chapter.id,
-                          ),
-                          number:
-                              index + 1,
-                          chapter:
-                              chapter,
-                          canDelete:
-                              true,
-                          onChanged:
-                              _autoSave,
-                          onDelete:
-                              () {
-                            _removeChapter(
-                              index,
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(
-                    height: 4,
-                  ),
-                  SizedBox(
-                    width:
-                        double.infinity,
-                    height: 50,
-                    child:
-                        OutlinedButton.icon(
-                      onPressed:
-                          _addChapter,
-                      icon:
-                          const Icon(
-                        Icons.add,
-                      ),
-                      label:
-                          const Text(
-                        'Add chapter',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 12,
-                  ),
-                  SizedBox(
-                    width:
-                        double.infinity,
-                    height: 52,
-                    child:
-                        FilledButton.icon(
-                      onPressed:
-                          _autoSave,
-                      icon:
-                          const Icon(
-                        Icons.save,
-                      ),
-                      label:
-                          const Text(
-                        'SAVE STUDY',
-                        style:
-                            TextStyle(
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 36),
+            sliver: SliverList(delegate: SliverChildListDelegate([
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Row(children: [
+                  Container(width: 50,height: 50,decoration:BoxDecoration(color:scheme.primary,borderRadius:BorderRadius.circular(16)),child:Icon(Icons.calendar_month_rounded,color:scheme.onPrimary)),
+                  const SizedBox(width:14),
+                  Expanded(child: Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                    Text('STUDY DATE',style:TextStyle(fontSize:11,fontWeight:FontWeight.w800,letterSpacing:1.3,color:scheme.onPrimaryContainer.withOpacity(.7))),
+                    const SizedBox(height:4),
+                    Text('${selectedDate.day} ${_monthShort(selectedDate.month)} ${selectedDate.year}',style:TextStyle(fontSize:20,fontWeight:FontWeight.w800,color:scheme.onPrimaryContainer)),
+                    const SizedBox(height:2),
+                    Text('${day.chapters.length} chapter${day.chapters.length == 1 ? '' : 's'}',style:TextStyle(color:scheme.onPrimaryContainer.withOpacity(.75))),
+                  ])),
+                  IconButton(onPressed:_pickDate,icon:Icon(Icons.edit_calendar_rounded,color:scheme.onPrimaryContainer)),
+                ]),
               ),
-            ),
+              const SizedBox(height:22),
+              Row(children:[Expanded(child:Text('TODAY’S NOTES',style:TextStyle(fontSize:12,fontWeight:FontWeight.w800,letterSpacing:1.5,color:scheme.onSurfaceVariant))),Text('${day.chapters.length} chapter${day.chapters.length==1?'':'s'}',style:TextStyle(fontSize:12,color:scheme.onSurfaceVariant,fontWeight:FontWeight.w700))]),
+              const SizedBox(height:10),
+              if(day.chapters.isEmpty) Container(padding:const EdgeInsets.all(28),decoration:BoxDecoration(color:scheme.surface,borderRadius:BorderRadius.circular(22),border:Border.all(color:scheme.outlineVariant)),child:Column(children:[Icon(Icons.auto_stories_outlined,size:42,color:scheme.primary),const SizedBox(height:10),const Text('Begin your study',style:TextStyle(fontSize:18,fontWeight:FontWeight.w800)),const SizedBox(height:5),Text('Add a chapter below and start writing.',style:TextStyle(color:scheme.onSurfaceVariant))]))
+              else ...List.generate(day.chapters.length,(index){final chapter=day.chapters[index];return Padding(padding:const EdgeInsets.only(bottom:16),child:ChapterCard(key:ValueKey(chapter.id),number:index+1,chapter:chapter,canDelete:true,onChanged:_autoSave,onDelete:()=>_removeChapter(index)));}),
+              const SizedBox(height:2),
+              OutlinedButton.icon(onPressed:_addChapter,icon:const Icon(Icons.add_rounded),label:const Text('ADD ANOTHER CHAPTER'),style:OutlinedButton.styleFrom(minimumSize:const Size.fromHeight(50),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(16)))),
+              const SizedBox(height:10),
+              FilledButton.icon(onPressed:_autoSave,icon:const Icon(Icons.save_rounded),label:const Text('SAVE STUDY',style:TextStyle(fontWeight:FontWeight.w800)),style:FilledButton.styleFrom(minimumSize:const Size.fromHeight(54),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(17)))),
+            ])),
           ),
         ],
       ),
     );
   }
+
+  String _monthShort(int m) => const ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1];
 
   Widget _buildDayHeader() {
     return Card(
